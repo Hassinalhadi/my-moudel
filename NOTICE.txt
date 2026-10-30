@@ -1,0 +1,38 @@
+================================================================================
+  HMOD-Zero  —  PROPRIETARY SOFTWARE  —  COPYRIGHT (c) H-MODS
+================================================================================
+
+This module and all of its components (the native library `libspoof.so`, the
+`licverify` binary, scripts, and WebUI) are the exclusive property of H-MODS.
+
+LICENSED USE ONLY
+  This software is licensed, not sold. Use requires a valid, per-device online
+  activation issued by H-MODS. Each licence is bound to a single device serial.
+
+STRICTLY PROHIBITED
+  - Reverse engineering, decompiling, or disassembling any component.
+  - Modifying, patching, or bypassing the licensing / activation checks.
+  - Redistributing, reselling, sublicensing, or sharing licence keys or grants.
+  - Removing or altering this notice.
+
+INTEGRITY & AUTHENTICITY
+  Genuine builds carry a signed integrity manifest and connect only to the
+  official H-MODS activation server. The module embeds only PUBLIC keys; the
+  signing keys never leave the H-MODS server, so activation grants CANNOT be
+  forged. Any redistributed build that has been modified is unauthorized,
+  non-genuine, and will fail integrity verification at install time.
+
+  If you obtained a "cracked", "modded", or "free" copy of this module, it is
+  stolen software: it may be back-doored, it will not receive updates, and its
+  use is unlawful.
+
+WARRANTY
+  Provided "as is", without warranty of any kind. H-MODS is not liable for any
+  damages arising from use or misuse.
+
+CONTACT / ABUSE REPORTS
+  Telegram: @hmods_bh
+
+Unauthorized modification or distribution will be pursued to the fullest extent
+permitted by law.
+================================================================================

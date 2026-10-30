@@ -1,0 +1,31 @@
+# HMOD-Zero System Properties
+# Boot integrity + default device identity (matches Kabir X-2.4 exactly)
+
+ro.debuggable=0
+ro.secure=1
+ro.build.type=user
+ro.build.tags=release-keys
+ro.build.selinux=1
+persist.sys.su=0
+ro.su.access=0
+ro.kernel.qemu=0
+persist.sys.root_access=0
+
+# Bootloader and verified boot state
+ro.boot.vbmeta.device_state=locked
+ro.boot.verifiedbootstate=green
+ro.boot.flash.locked=1
+ro.boot.veritymode=enforcing
+
+# Default Samsung Model — system-wide baseline so Play Services and Play
+# Integrity see the same device identity as injected apps.  Without this,
+# GMS reports the real device while Zygisk-injected apps report Samsung,
+# causing a cross-process mismatch that triggers 401 on Talabat Rider.
+ro.product.model=SM-S928B
+ro.product.system.model=SM-S928B
+ro.product.vendor.model=SM-S928B
+ro.product.product.model=SM-S928B
+ro.product.odm.model=SM-S928B
+ro.product.system_ext.model=SM-S928B
+ro.product.system_dlkm.model=SM-S928B
+ro.product.odm_dlkm.model=SM-S928B

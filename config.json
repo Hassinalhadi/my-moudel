@@ -1,0 +1,11 @@
+{
+  "global_spoof": {
+    "enabled": false,
+    "device_info": {}
+  },
+  "cpu_spoof": {
+    "blacklist": [],
+    "cpu_only_packages": []
+  },
+  "active_injections": {}
+}

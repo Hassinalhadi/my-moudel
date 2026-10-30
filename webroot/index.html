@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>HMOD-Zero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- BANNER -->
+<div class="banner">
+  <div class="banner-img"></div>
+  <div class="banner-shine"></div>
+  <div class="pill pill-status" onclick="showTab('license',document.getElementById('tab-license'))"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7l4 4 5-7 5 7 4-4-1.5 12H4.5L3 7z"/></svg>PREMIUM</div>
+  <div class="pill pill-contact" onclick="openModal('contact-modal')"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>CONTACT</div>
+  <div class="banner-txt" style="display:flex;align-items:center;gap:14px">
+    <svg class="hmod-logo" viewBox="0 0 64 64" width="54" height="54" aria-label="HMOD">
+      <defs><filter id="hglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+      <path d="M32 4 56 18v28L32 60 8 46V18z" fill="currentColor" opacity=".10"/>
+      <path d="M32 4 56 18v28L32 60 8 46V18z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" filter="url(#hglow)"/>
+      <g stroke="currentColor" stroke-width="4.6" stroke-linecap="round" filter="url(#hglow)">
+        <line x1="24" y1="21" x2="24" y2="43"/>
+        <line x1="40" y1="21" x2="40" y2="43"/>
+        <line x1="24" y1="32" x2="40" y2="32"/>
+      </g>
+    </svg>
+    <div><h2>HMOD-Zero</h2><span id="nav-ver-sub">v3.6 · Premium</span></div>
+  </div>
+</div>
+
+<div class="nav">
+  <div class="badge" id="lic-badge">&#9679;&nbsp;CHECKING…</div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span id="save-indicator"></span>
+    <div class="mod-ver-pill" id="nav-ver">v3.6</div>
+  </div>
+</div>
+
+<!-- UNLICENSED WARNING -->
+<div class="lic-banner" id="lic-banner" style="display:none">
+  <div class="lic-banner-icon"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+  <div class="lic-banner-txt">
+    <b>Unlicensed device</b>
+    <span>Injection is disabled. Enter your activation key in the License tab.</span>
+  </div>
+  <button class="lic-banner-btn" onclick="showTab('license',document.getElementById('tab-license'))">Activate</button>
+</div>
+
+<div class="tabs"><div class="tab-wrap">
+  <button class="tab active" onclick="showTab('targets',this)"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Targets</button>
+  <button class="tab" onclick="showTab('devices',this)"><svg class="ico" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>Devices</button>
+  <button class="tab" id="tab-license" onclick="showTab('license',this)"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4 3 6.5 7 8 4-1.5 7-4 7-8V6l-7-3z"/><path d="m9 12 2 2 4-4"/></svg>Premium</button>
+  <button class="tab" onclick="showTab('log',this)"><svg class="ico" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3M13 15h4"/></svg>Log</button>
+</div></div>
+
+<!-- TARGETS -->
+<div class="panel active" id="panel-targets">
+  <div class="sec-title">Active Injections</div>
+  <div class="card" id="active-list"><div class="empty-state">No active injections</div></div>
+  <div class="card" style="display:flex;gap:8px">
+    <button class="btn btn-outline" onclick="exportConfig()">Backup config</button>
+    <button class="btn btn-outline" onclick="importConfig()">Restore config</button>
+  </div>
+  <div class="sec-title">Inject App</div>
+  <div class="card">
+    <div class="field"><div class="field-label">Target Package</div>
+      <select id="sel-app">
+        <option value="com.example.learnzygisk">LearnZygisk (Test App)</option>
+        <option value="com.logistics.rider.talabat">Talabat Rider</option>
+        <option value="com.logistics.rider.hungerstation">HungerStation Rider</option>
+        <option value="com.ab.driver">Keeta Driver</option>
+        <option value="com.logistics.rider.foodpanda">Foodpanda Rider</option>
+        <option value="com.google.android.gms">Google Play Services</option>
+        <option value="com.google.android.gsf">Google Services Framework</option>
+        <option value="com.android.vending">Play Store</option>
+      </select></div>
+    <div class="field"><div class="field-label">Or pick an installed app</div>
+      <div style="display:flex;gap:8px">
+        <input id="app-search" placeholder="Search installed apps…" oninput="filterApps()">
+        <button class="btn btn-outline btn-sm" style="width:auto;white-space:nowrap" onclick="loadInstalledApps()">Load</button>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:var(--muted);text-transform:none;letter-spacing:0">
+        <input type="checkbox" id="app-sys" style="width:auto" onchange="loadInstalledApps()"> Include system apps
+      </label>
+      <div class="device-select-wrap" id="app-list" style="display:none;margin-top:8px"></div>
+    </div>
+    <div class="field"><div class="field-label">Selected Device</div>
+      <div id="sel-device-label" style="font-size:13px;color:var(--muted);padding:4px 0">Generate devices first in the Devices tab</div></div>
+    <div class="field">
+      <button class="btn btn-primary" id="btn-inject" onclick="injectApp()" disabled>Inject — Saves Automatically</button>
+    </div>
+  </div>
+  <div class="note">Force-stop the target app after inject for it to take effect</div>
+</div>
+
+<!-- DEVICES -->
+<div class="panel" id="panel-devices">
+  <div class="sec-title">Device Generator</div>
+  <div class="card">
+    <div class="field" style="display:flex;gap:0;padding:0">
+      <div style="flex:1;padding:14px 16px;border-right:1px solid var(--border2)">
+        <div class="field-label">Brand</div>
+        <select id="sel-brand"></select>
+      </div>
+      <div style="flex:1;padding:14px 16px">
+        <div class="field-label">Android</div>
+        <select id="sel-android">
+          <option value="auto">Auto (Phone)</option>
+          <option value="36|16">Android 16 · SDK 36</option>
+          <option value="35|15">Android 15 · SDK 35</option>
+          <option value="34|14">Android 14 · SDK 34</option>
+          <option value="33|13">Android 13 · SDK 33</option>
+          <option value="32|12L">Android 12L · SDK 32</option>
+          <option value="31|12">Android 12 · SDK 31</option>
+          <option value="30|11">Android 11 · SDK 30</option>
+          <option value="29|10">Android 10 · SDK 29</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <button class="btn btn-primary" id="btn-generate" onclick="generateDevices()">Generate 300 Devices</button>
+    </div>
+  </div>
+  <div id="device-list-wrap" style="display:none">
+    <div class="sec-title" id="db-count">Generated Devices</div>
+    <div class="card">
+      <input id="dev-search" placeholder="Search model, chipset, Android…" oninput="renderDeviceList()"
+        style="width:100%;margin-bottom:10px" spellcheck="false">
+      <div class="device-select-wrap" id="device-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LICENSE / PREMIUM -->
+<div class="panel" id="panel-license">
+  <div class="card lic-premium-head">
+    <div class="crown"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7l4 4 5-7 5 7 4-4-1.5 12H4.5L3 7z"/><path d="M4.5 19h15"/></svg></div>
+    <h3>PREMIUM LICENSE</h3><p>ONLINE VERIFIED</p>
+  </div>
+
+  <div class="card lic-exp-card" id="lic-exp-card" style="display:none">
+    <div class="lic-exp-big" id="lic-exp-big">—</div>
+    <div class="lic-exp-lbl">DAYS REMAINING</div>
+    <div class="lic-exp-bar"><div class="lic-exp-fill" id="lic-exp-fill"></div></div>
+  </div>
+
+  <div class="card">
+    <div class="lic-status" id="lic-status-box" style="margin-bottom:12px">
+      <div class="lic-status-dot" id="lic-dot"></div>
+      <div>
+        <div class="lic-status-title" id="lic-status-title">Checking…</div>
+        <div class="lic-status-sub" id="lic-status-sub">Reading device license</div>
+      </div>
+    </div>
+    <div class="info-row"><span class="info-key">Original Serial</span><span class="info-val gold" id="lic-serial">—</span></div>
+    <div class="info-row"><span class="info-key">Expires</span><span class="info-val" id="lic-exp-date">—</span></div>
+    <div class="info-row"><span class="info-key">Next online check</span><span class="info-val" id="lic-exp-next">—</span></div>
+    <div id="lic-msg" class="lic-msg"></div>
+  </div>
+
+  <div class="card">
+    <div class="note" style="text-align:left;padding:0 0 10px">
+      Send your <b>Original Serial</b> to H-MODS to be registered. Once registered,
+      tap <b>Refresh Online Status</b> — no key needed. Activation is verified online
+      and is bound to this device only.
+    </div>
+    <button class="btn btn-primary" onclick="copySerial()" style="margin-bottom:8px">Copy Serial</button>
+    <button class="btn btn-wa" onclick="sendSerialWhatsApp()" style="margin-bottom:8px">
+      <svg class="ico" viewBox="0 0 24 24" style="vertical-align:-3px;margin-right:6px"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 9.5c0 3 3 6 6 6"/></svg>
+      Send Serial on WhatsApp
+    </button>
+    <button class="btn btn-outline" id="btn-activate" onclick="activateLicense()">Refresh Online Status</button>
+  </div>
+  <div class="note">After activating, force-stop your target app (or reboot) for injection to take effect.</div>
+</div>
+
+<!-- LOG -->
+<div class="panel" id="panel-log">
+  <div class="log-header">
+    <span class="sec-title" style="margin:0">Module Log</span>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline btn-sm" onclick="clearLog()">Clear</button>
+      <button class="btn btn-sm btn-primary" style="width:auto;padding:7px 18px" id="btn-log" onclick="toggleLog()">Start</button>
+    </div>
+  </div>
+  <div class="log-area" id="log-area"><div class="log-empty">Tap Start to stream logcat</div></div>
+</div>
+
+<!-- BOTTOM NAV -->
+<div class="bottom-nav">
+  <div class="home-btn active" onclick="openModal('home-modal')">
+    <div class="home-icon"><svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9"/></svg></div>
+    <div class="home-label">Home</div>
+  </div>
+</div>
+
+<!-- HOME MODAL -->
+<div class="modal-overlay" id="home-modal" onclick="if(event.target===this)closeModal('home-modal')">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" onclick="closeModal('home-modal')">&#10005;</button>
+      <div class="crown"><svg class="ico" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
+      <h3>DEVICE INFO</h3><p>Real Hardware</p>
+    </div>
+    <div class="info-row"><span class="info-key">Model</span><span class="info-val gold" id="di-model">&mdash;</span></div>
+    <div class="info-row"><span class="info-key">Kernel</span><span class="info-val" id="di-kernel">&mdash;</span></div>
+    <div class="info-row"><span class="info-key">SDK</span><span class="info-val" id="di-sdk">&mdash;</span></div>
+    <div class="info-row"><span class="info-key">Zygisk</span><span class="info-val gold" id="di-zygisk">&mdash;</span></div>
+    <div class="info-row"><span class="info-key">Module</span><span class="info-val gold" id="di-module">&mdash;</span></div>
+    <div class="mod-head"><span>Installed Modules</span><span id="di-modcount" class="mod-count">&mdash;</span></div>
+    <div class="mod-list" id="di-modules"><div class="empty-state" style="padding:16px">Loading&hellip;</div></div>
+    <div class="hue-row">
+      <div class="hue-label">Accent Color <span id="hue-swatch"></span></div>
+      <input type="range" class="hue-slider" id="home-hue" min="0" max="360" value="43" oninput="setHue(this.value)">
+      <div class="hue-presets">
+        <span class="hue-dot" style="background:hsl(43,92%,56%)"  onclick="pickHue(43)"></span>
+        <span class="hue-dot" style="background:hsl(200,78%,53%)" onclick="pickHue(200)"></span>
+        <span class="hue-dot" style="background:hsl(280,78%,53%)" onclick="pickHue(280)"></span>
+        <span class="hue-dot" style="background:hsl(140,78%,53%)" onclick="pickHue(140)"></span>
+        <span class="hue-dot" style="background:hsl(0,78%,53%)"   onclick="pickHue(0)"></span>
+        <span class="hue-dot" style="background:hsl(330,78%,53%)" onclick="pickHue(330)"></span>
+        <span class="hue-dot" style="background:hsl(25,78%,53%)"  onclick="pickHue(25)"></span>
+      </div>
+    </div>
+    <div class="hue-row" style="border-top:none;padding-top:4px">
+      <div class="hue-label">Saturation <span style="color:var(--faint);letter-spacing:0;text-transform:none;font-size:10px">(muted &rarr; vivid)</span></div>
+      <input type="range" class="sat-slider" id="home-sat" min="0" max="100" value="92" oninput="setSat(this.value)">
+    </div>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('home-modal')">Close</button></div>
+  </div>
+</div>
+
+<!-- STATUS MODAL -->
+<div class="modal-overlay" id="status-modal" onclick="if(event.target===this)closeModal('status-modal')">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" onclick="closeModal('status-modal')">&#10005;</button>
+      <div class="crown"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+      <h3>MODULE STATUS</h3><p>HMOD-Zero</p>
+    </div>
+    <div class="info-row"><span class="info-key">Status</span><span class="info-val gold" id="st-status">Loading…</span></div>
+    <div class="info-row"><span class="info-key">Device Serial</span><span class="info-val" style="font-family:'JetBrains Mono',monospace;font-size:11px" id="st-serial">—</span></div>
+    <div class="info-row"><span class="info-key">Last Check</span><span class="info-val" id="st-lastcheck">—</span></div>
+    <div class="info-row"><span class="info-key">Active Targets</span><span class="info-val gold" id="st-targets">0</span></div>
+    <div class="info-row"><span class="info-key">Message</span><span class="info-val" style="font-size:11px;text-align:right;max-width:65%" id="st-message">—</span></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="refreshStatus()">Refresh</button>
+      <button class="btn btn-outline" onclick="closeModal('status-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTACT MODAL -->
+<div class="modal-overlay" id="contact-modal" onclick="if(event.target===this)closeModal('contact-modal')">
+  <div class="modal">
+    <div class="modal-head">
+      <button class="modal-close" onclick="closeModal('contact-modal')">&#10005;</button>
+      <div class="crown"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></div>
+      <h3>H-MODS</h3><p>Device Modification Services &middot; Bahrain</p>
+    </div>
+    <div style="padding:8px 0">
+      <div class="contact-item" onclick="openLink('https://t.me/hmods_bh')">
+        <div class="contact-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M22 3 2 11l6 2 2 6 3-4 5 4 4-16z"/><path d="m8 13 8-6"/></svg></div>
+        <div class="contact-info"><div class="contact-name">Telegram</div><div class="contact-sub">@hmods_bh</div></div>
+      </div>
+      <div class="contact-item" onclick="openLink('https://wa.me/923293003848')">
+        <div class="contact-icon"><svg class="ico" viewBox="0 0 24 24"><path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 21l2.1-5.4A8.5 8.5 0 1 1 21 11.5z"/><path d="M8.5 9.5c0 3 3 6 6 6"/></svg></div>
+        <div class="contact-info"><div class="contact-name">WhatsApp</div><div class="contact-sub">+92 329 3003848</div></div>
+      </div>
+    </div>
+    <div class="modal-actions"><button class="btn btn-outline" onclick="closeModal('contact-modal')">Close</button></div>
+  </div>
+</div>
+
+<script src="scripts.js"></script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+{
+  "_comment": "HMOD-Zero Integrity Profiles - Google Pixel devices for Play Integrity pass",
+  "_active": "pixel9",
+  "_note": "Set _active to a profile key below. Default = pixel9 (tokay). Pixel 9 series uses CANARY beta build. action.sh cycles through them.",
+
+  "profiles": {
+
+    "pixel9": {
+      "MANUFACTURER": "Google",
+      "MODEL": "Pixel 9",
+      "FINGERPRINT": "google/tokay_beta/tokay:CANARY/ZP11.260515.009/15513807:user/release-keys",
+      "BRAND": "google",
+      "PRODUCT": "tokay_beta",
+      "DEVICE": "tokay",
+      "RELEASE": "CANARY",
+      "ID": "ZP11.260515.009",
+      "INCREMENTAL": "15513807",
+      "TYPE": "user",
+      "TAGS": "release-keys",
+      "SECURITY_PATCH": "2026-06-01",
+      "DEVICE_INITIAL_SDK_INT": "32"
+    },
+
+    "pixel9proxl": {
+      "MANUFACTURER": "Google",
+      "MODEL": "Pixel 9 Pro XL",
+      "FINGERPRINT": "google/komodo_beta/komodo:CANARY/ZP11.260515.009/15513807:user/release-keys",
+      "BRAND": "google",
+      "PRODUCT": "komodo_beta",
+      "DEVICE": "komodo",
+      "RELEASE": "CANARY",
+      "ID": "ZP11.260515.009",
+      "INCREMENTAL": "15513807",
+      "TYPE": "user",
+      "TAGS": "release-keys",
+      "SECURITY_PATCH": "2026-06-01",
+      "DEVICE_INITIAL_SDK_INT": "32"
+    },
+
+    "pixel9pro": {
+      "MANUFACTURER": "Google",
+      "MODEL": "Pixel 9 Pro",
+      "FINGERPRINT": "google/caiman_beta/caiman:CANARY/ZP11.260515.009/15513807:user/release-keys",
+      "BRAND": "google",
+      "PRODUCT": "caiman_beta",
+      "DEVICE": "caiman",
+      "RELEASE": "CANARY",
+      "ID": "ZP11.260515.009",
+      "INCREMENTAL": "15513807",
+      "TYPE": "user",
+      "TAGS": "release-keys",
+      "SECURITY_PATCH": "2026-06-01",
+      "DEVICE_INITIAL_SDK_INT": "32"
+    },
+
+    "pixel8pro": {
+      "MANUFACTURER": "Google",
+      "MODEL": "Pixel 8 Pro",
+      "FINGERPRINT": "google/husky/husky:15/AP3A.241005.015/12367307:user/release-keys",
+      "BRAND": "google",
+      "PRODUCT": "husky",
+      "DEVICE": "husky",
+      "RELEASE": "15",
+      "ID": "AP3A.241005.015",
+      "INCREMENTAL": "12367307",
+      "TYPE": "user",
+      "TAGS": "release-keys",
+      "SECURITY_PATCH": "2024-10-05",
+      "DEVICE_INITIAL_SDK_INT": "34"
+    },
+
+    "pixel8": {
+      "MANUFACTURER": "Google",
+      "MODEL": "Pixel 8",
+      "FINGERPRINT": "google/shiba/shiba:15/AP3A.241005.015/12367307:user/release-keys",
+      "BRAND": "google",
+      "PRODUCT": "shiba",
+      "DEVICE": "shiba",
+      "RELEASE": "15",
+      "ID": "AP3A.241005.015",
+      "INCREMENTAL": "12367307",
+      "TYPE": "user",
+      "TAGS": "release-keys",
+      "SECURITY_PATCH": "2024-10-05",
+      "DEVICE_INITIAL_SDK_INT": "34"
+    },
+
+    "pixel7pro": {
+      "MANUFACTURER": "Google",
+      "MODEL": "Pixel 7 Pro",
+      "FINGERPRINT": "google/cheetah/cheetah:15/AP3A.241005.015/12367307:user/release-keys",
+      "BRAND": "google",
+      "PRODUCT": "cheetah",
+      "DEVICE": "cheetah",
+      "RELEASE": "15",
+      "ID": "AP3A.241005.015",
+      "INCREMENTAL": "12367307",
+      "TYPE": "user",
+      "TAGS": "release-keys",
+      "SECURITY_PATCH": "2024-10-05",
+      "DEVICE_INITIAL_SDK_INT": "33"
+    }
+  }
+}

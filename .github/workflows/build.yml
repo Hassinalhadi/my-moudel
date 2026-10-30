@@ -1,0 +1,737 @@
+name: Build Offline HMOD-Zero Module
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-offline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Prepare Offline Keybox (Pre-fetch or Generate Locally)
+        run: |
+          python3 - << 'PYEOF'
+          import base64, binascii, codecs, pathlib, subprocess, urllib.request
+
+          kb_path = pathlib.Path("keybox.xml")
+          url = "https://raw.githubusercontent.com/MeowDump/MeowDump/refs/heads/main/Megatron"
+          decoded = None
+
+          try:
+              req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+              with urllib.request.urlopen(req, timeout=15) as resp:
+                  data = resp.read()
+              for _ in range(10):
+                  data = base64.b64decode(data)
+              raw_hex = data.decode("ascii", errors="ignore").strip()
+              unhexed = binascii.unhexlify(raw_hex).decode("utf-8", errors="ignore")
+              cand = codecs.encode(unhexed, "rot_13")
+              if "<AndroidAttestation>" in cand:
+                  decoded = cand
+                  print("Fetched and decoded online keybox into offline keybox.xml.")
+          except Exception as e:
+              print(f"Online keybox fetch skipped ({e}); generating local offline keybox.xml...")
+
+          if not decoded:
+              # Generate a valid offline AndroidAttestation keybox.xml using openssl so action.sh always succeeds offline
+              subprocess.run(["openssl", "ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", "/tmp/ec_priv.pem"], check=True)
+              subprocess.run(["openssl", "req", "-new", "-x509", "-key", "/tmp/ec_priv.pem", "-out", "/tmp/ec_cert.pem", "-days", "3650", "-subj", "/CN=Android Keystore Software Attestation Root"], check=True, stderr=subprocess.DEVNULL)
+              subprocess.run(["openssl", "genrsa", "-out", "/tmp/rsa_priv.pem", "2048"], check=True, stderr=subprocess.DEVNULL)
+              subprocess.run(["openssl", "req", "-new", "-x509", "-key", "/tmp/rsa_priv.pem", "-out", "/tmp/rsa_cert.pem", "-days", "3650", "-subj", "/CN=Android Keystore Software Attestation Root"], check=True, stderr=subprocess.DEVNULL)
+
+              ec_priv = pathlib.Path("/tmp/ec_priv.pem").read_text().strip()
+              ec_cert = pathlib.Path("/tmp/ec_cert.pem").read_text().strip()
+              rsa_priv = pathlib.Path("/tmp/rsa_priv.pem").read_text().strip()
+              rsa_cert = pathlib.Path("/tmp/rsa_cert.pem").read_text().strip()
+
+              decoded = f'''<?xml version="1.0"?>
+          <AndroidAttestation>
+          <NumberOfKeyboxes>1</NumberOfKeyboxes>
+          <Keybox DeviceID="HMODZero_Offline_Keybox">
+          <Key algorithm="ecdsa">
+          <PrivateKey format="pem">
+          {ec_priv}
+          </PrivateKey>
+          <CertificateChain>
+          <NumberOfCertificates>1</NumberOfCertificates>
+          <Certificate format="pem">
+          {ec_cert}
+          </Certificate>
+          </CertificateChain>
+          </Key>
+          <Key algorithm="rsa">
+          <PrivateKey format="pem">
+          {rsa_priv}
+          </PrivateKey>
+          <CertificateChain>
+          <NumberOfCertificates>1</NumberOfCertificates>
+          <Certificate format="pem">
+          {rsa_cert}
+          </Certificate>
+          </CertificateChain>
+          </Key>
+          </Keybox>
+          </AndroidAttestation>
+          '''
+              decoded = "\n".join(line.lstrip() for line in decoded.splitlines()) + "\n"
+              print("Generated permanent offline keybox.xml via OpenSSL.")
+
+          kb_path.write_text(decoded, encoding="utf-8")
+          PYEOF
+
+      - name: Replace Online License Verifier with Instant Offline Binary Script
+        run: |
+          mkdir -p bin/arm64-v8a bin/armeabi-v7a
+          cat > /tmp/licverify_offline << 'LICEOF'
+          #!/system/bin/sh
+          MODDIR="/data/adb/modules/hmod_zero"
+          SERIAL="$(cat "$MODDIR/device.serial" 2>/dev/null | tr -d '\r\n[:space:]')"
+          [ -z "$SERIAL" ] && SERIAL="$(getprop ro.serialno 2>/dev/null)"
+          [ -z "$SERIAL" ] && SERIAL="$(getprop ro.boot.serialno 2>/dev/null)"
+          [ -z "$SERIAL" ] && SERIAL="OFFLINE-ACTIVE"
+
+          case "$1" in
+            --verify-manifest)
+              exit 0
+              ;;
+            --serial)
+              printf '%s\n' "$SERIAL"
+              exit 0
+              ;;
+            --activate|--refresh)
+              printf '{"status":"active","expiry":4102444800,"licexp":4102444800,"issued":1700000000}\n' > "$MODDIR/license.grant" 2>/dev/null
+              chmod 0644 "$MODDIR/license.grant" 2>/dev/null
+              printf 'RESULT=ok\nLICENSED=1\nSERIAL=%s\nMSG=Offline Mode Active\n' "$SERIAL"
+              exit 0
+              ;;
+            *)
+              printf 'SERIAL=%s\nLICENSED=1\nRESULT=ok\nMSG=Offline Mode Active\n' "$SERIAL"
+              exit 0
+              ;;
+          esac
+          LICEOF
+          sed -i 's/^          //' /tmp/licverify_offline
+          cp -f /tmp/licverify_offline bin/arm64-v8a/licverify
+          cp -f /tmp/licverify_offline bin/armeabi-v7a/licverify
+          chmod 0755 bin/arm64-v8a/licverify bin/armeabi-v7a/licverify
+
+      - name: Disable All Script & WebUI Security Gates for Permanent Offline Mode
+        run: |
+          python3 - << 'PYEOF'
+          import pathlib, re
+
+          # 1. Write clean customize.sh with all manifest/signature/tamper checks completely disabled
+          cust_content = '''#!/system/bin/sh
+
+          show_header() {
+            ui_print "══════════════════════════════════════════════"
+            ui_print "     HMOD-Zero — OFFLINE EDITION (PERMANENT)  "
+            ui_print "══════════════════════════════════════════════"
+          }
+
+          show_footer() {
+            ui_print "══════════════════════════════════════════════"
+          }
+
+          log_status() { ui_print "  [✦] $1"; }
+          log_ok()     { ui_print "  [✔] $1"; }
+          log_fail()   { ui_print "  [✘] $1"; show_footer; exit 1; }
+
+          show_header
+          log_status "Installing HMOD-Zero (Offline Permanent)..."
+
+          if ! $BOOTMODE; then
+            log_fail "Recovery installation detected. Flash through Magisk, KernelSU or APatch Manager."
+          fi
+
+          if [ "$API" -lt 28 ]; then
+            log_fail "Unsupported Android version. Android 9.0 or newer is required."
+          fi
+
+          PRIMARY_ABI="$(getprop ro.product.cpu.abi 2>/dev/null)"
+          SYSTEM_ABI_LIST="$(getprop ro.product.cpu.abilist 2>/dev/null)"
+          SELECTED_ARCH="arm64"
+
+          case "$PRIMARY_ABI" in
+            arm64-v8a|arm64|aarch64) SELECTED_ARCH="arm64" ;;
+            armeabi-v7a|armeabi|armv7l) SELECTED_ARCH="arm32" ;;
+            *)
+              if echo "$SYSTEM_ABI_LIST" | grep -qE '(^|,)arm64-v8a(,|$)'; then
+                SELECTED_ARCH="arm64"
+              elif echo "$SYSTEM_ABI_LIST" | grep -qE '(^|,)(armeabi-v7a|armeabi)(,|$)'; then
+                SELECTED_ARCH="arm32"
+              fi
+              ;;
+          esac
+
+          log_ok "Architecture identified: $SELECTED_ARCH (${PRIMARY_ABI:-unknown})"
+
+          case "$SELECTED_ARCH" in
+            arm64) LIC_SRC="$MODPATH/bin/arm64-v8a/licverify" ;;
+            arm32) LIC_SRC="$MODPATH/bin/armeabi-v7a/licverify" ;;
+          esac
+
+          mkdir -p "$MODPATH/bin"
+          if [ -f "$LIC_SRC" ]; then
+            cp -f "$LIC_SRC" "$MODPATH/bin/licverify"
+            chmod 0755 "$MODPATH/bin/licverify" 2>/dev/null
+            log_ok "Offline verifier installed ($SELECTED_ARCH)"
+          fi
+          rm -rf "$MODPATH/bin/arm64-v8a" "$MODPATH/bin/armeabi-v7a"
+
+          # Pre-install bundled offline keybox to TrickyStore if available
+          if [ -s "$MODPATH/keybox.xml" ]; then
+            mkdir -p /data/adb/tricky_store 2>/dev/null
+            if [ ! -s /data/adb/tricky_store/keybox.xml ]; then
+              cp -f "$MODPATH/keybox.xml" /data/adb/tricky_store/keybox.xml 2>/dev/null
+              chmod 0644 /data/adb/tricky_store/keybox.xml 2>/dev/null
+              chcon u:object_r:system_file:s0 /data/adb/tricky_store/keybox.xml 2>/dev/null
+            fi
+            log_ok "Offline keybox ready"
+          fi
+
+          log_status "Configuring runtime execution permissions..."
+
+          for target_script in \
+            customize.sh \
+            service.sh \
+            service_v2.sh \
+            action.sh \
+            post-fs-data.sh \
+            apply_props.sh \
+            common/get_serial.sh
+          do
+            [ -f "$MODPATH/$target_script" ] && chmod 0755 "$MODPATH/$target_script" 2>/dev/null
+          done
+
+          printf '{"status":"active","expiry":4102444800,"licexp":4102444800,"issued":1700000000}\n' > "$MODPATH/license.grant"
+          printf '{"status":"active","expiresAt":0,"lastCheck":0,"message":"Offline Mode Active"}\n' > "$MODPATH/status.json"
+
+          for target_config in \
+            module.prop \
+            config.json \
+            pif.json \
+            keybox.xml \
+            license.grant \
+            status.json \
+            checksums.sha256 \
+            checksums.sig
+          do
+            [ -f "$MODPATH/$target_config" ] && chmod 0644 "$MODPATH/$target_config" 2>/dev/null
+          done
+
+          for zygisk_library in \
+            zygisk/arm64-v8a.so \
+            zygisk/armeabi-v7a.so
+          do
+            if [ -f "$MODPATH/$zygisk_library" ]; then
+              chmod 0644 "$MODPATH/$zygisk_library" 2>/dev/null
+            else
+              log_fail "Required Zygisk library is missing: $zygisk_library"
+            fi
+          done
+
+          [ -f "$MODPATH/bin/licverify" ] && chmod 0755 "$MODPATH/bin/licverify" 2>/dev/null
+
+          log_status "Applying SELinux security contexts..."
+          find "$MODPATH" -type f 2>/dev/null | while IFS= read -r f; do
+            chcon u:object_r:system_file:s0 "$f" 2>/dev/null
+          done
+
+          rm -rf \
+            "$MODPATH/system/etc/sysconfig" \
+            "$MODPATH/system/product/etc/sysconfig" 2>/dev/null
+
+          find "$MODPATH" -mindepth 1 -type d -empty -delete 2>/dev/null
+
+          ui_print " "
+          log_ok "Offline installation completed!"
+          log_status "Reboot the device to activate HMOD-Zero."
+          show_footer
+          '''
+          cust_content = "\n".join(line[10:] if line.startswith("          ") else line for line in cust_content.splitlines()) + "\n"
+          pathlib.Path("customize.sh").write_text(cust_content, encoding="utf-8")
+
+          # 2. Update post-fs-data.sh: write active offline status & license.grant at boot
+          pfs_path = pathlib.Path("post-fs-data.sh")
+          if pfs_path.exists():
+              pfs = pfs_path.read_text(encoding="utf-8")
+              pfs = pfs.replace(
+                  '{"status":"not_activated","expiresAt":0,"lastCheck":0,"message":"Send this serial to Admin for activation."}',
+                  '{"status":"active","expiresAt":0,"lastCheck":0,"message":"Offline Mode Active"}'
+              )
+              if "license.grant" not in pfs:
+                  pfs += '\nGRANT="$MODDIR/license.grant"\nif [ ! -f "$GRANT" ]; then\n    printf \'{"status":"active","expiry":4102444800,"licexp":4102444800,"issued":1700000000}\\n\' > "$GRANT"\n    chmod 0644 "$GRANT"\n    chcon u:object_r:system_file:s0 "$GRANT" 2>/dev/null\nfi\n'
+              pfs_path.write_text(pfs, encoding="utf-8")
+
+          # 3. Update service_v2.sh: pure offline service, no license gate exit, no network polling, no target revocation
+          svc2_content = '''#!/system/bin/sh
+          # service_v2.sh — HMOD-Zero fast offline background service.
+
+          MODDIR="/data/adb/modules/hmod_zero"
+          CONFIG_FILE="$MODDIR/config.json"
+          STATUS_FILE="$MODDIR/status.json"
+          SERIAL_FILE="$MODDIR/device.serial"
+          GRANT_FILE="$MODDIR/license.grant"
+          BT_APPLIED_FILE="$MODDIR/.bt_applied"
+          LAST_HASH_FILE="$MODDIR/.cfg_hash"
+
+          . "$MODDIR/common/get_serial.sh"
+
+          json_escape() { printf '%s' "$1" | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/\\r//g'; }
+
+          write_status() {
+              STATUS="$1"
+              EXPIRES_AT="${2:-0}"
+              MSG="${3:-Offline Mode Active}"
+              NOW="$(date +%s 2>/dev/null)"; [ -z "$NOW" ] && NOW=0
+              TMP="$STATUS_FILE.tmp.$$"
+              printf '{"status":"%s","expiresAt":%s,"lastCheck":%s,"message":"%s"}\\n' \
+                  "$(json_escape "$STATUS")" \
+                  "$EXPIRES_AT" \
+                  "$NOW" \
+                  "$(json_escape "$MSG")" > "$TMP" || { rm -f "$TMP"; return 1; }
+              chmod 0644 "$TMP"
+              mv -f "$TMP" "$STATUS_FILE" || { rm -f "$TMP"; return 1; }
+              chcon u:object_r:system_file:s0 "$STATUS_FILE" 2>/dev/null
+          }
+
+          ensure_grant() {
+              if [ ! -s "$GRANT_FILE" ]; then
+                  printf '{"status":"active","expiry":4102444800,"licexp":4102444800,"issued":1700000000}\\n' > "$GRANT_FILE" 2>/dev/null
+                  chmod 0644 "$GRANT_FILE" 2>/dev/null
+                  chcon u:object_r:system_file:s0 "$GRANT_FILE" 2>/dev/null
+              fi
+          }
+
+          is_safe_pkg() {
+              PKG="$1"
+              [ -n "$PKG" ] || return 1
+              [ "${#PKG}" -le 200 ] || return 1
+              case "$PKG" in *.*) ;; *) return 1 ;; esac
+              case "$PKG" in *[!a-zA-Z0-9._]*) return 1 ;; esac
+              return 0
+          }
+
+          read_target_packages() {
+              [ -r "$CONFIG_FILE" ] || return 0
+              awk '
+                  function count_char(text, needle, count, i) {
+                      count = 0
+                      for (i = 1; i <= length(text); i++) {
+                          if (substr(text, i, 1) == needle) count++
+                      }
+                      return count
+                  }
+                  /"active_injections"[[:space:]]*:/ {
+                      in_active = 1; depth = 0
+                      pos = index($0, "{")
+                      if (pos > 0) {
+                          rest = substr($0, pos)
+                          depth += count_char(rest, "{")
+                          depth -= count_char(rest, "}")
+                      }
+                      next
+                  }
+                  in_active {
+                      if (depth == 1 && $0 ~ /^[[:space:]]*"[^"]+"[[:space:]]*:[[:space:]]*\\{/) {
+                          pkg = $0
+                          sub(/^[[:space:]]*"/, "", pkg)
+                          sub(/"[[:space:]]*:.*/, "", pkg)
+                          if (pkg ~ /^[A-Za-z0-9_]+([.][A-Za-z0-9_]+)+$/) print pkg
+                      }
+                      depth += count_char($0, "{")
+                      depth -= count_char($0, "}")
+                      if (depth <= 0) exit
+                  }
+              ' "$CONFIG_FILE" 2>/dev/null
+          }
+
+          block_bt() {
+              is_safe_pkg "$1" || return 1
+              cmd appops set "$1" BLUETOOTH_SCAN ignore >/dev/null 2>&1
+              cmd appops set "$1" BLUETOOTH_ADVERTISE ignore >/dev/null 2>&1
+              pm grant "$1" android.permission.READ_PHONE_STATE >/dev/null 2>&1
+          }
+
+          reset_bt() {
+              is_safe_pkg "$1" || return 1
+              cmd appops set "$1" BLUETOOTH_SCAN default >/dev/null 2>&1
+              cmd appops set "$1" BLUETOOTH_ADVERTISE default >/dev/null 2>&1
+          }
+
+          apply_bt_blocks() {
+              CUR="$MODDIR/.bt_current.$$"
+              NEW="$MODDIR/.bt_new.$$"
+              read_target_packages | sort -u > "$CUR"
+              chmod 0600 "$CUR"
+
+              if [ -r "$BT_APPLIED_FILE" ]; then
+                  while IFS= read -r OLD || [ -n "$OLD" ]; do
+                      is_safe_pkg "$OLD" || continue
+                      grep -Fxq "$OLD" "$CUR" 2>/dev/null || reset_bt "$OLD"
+                  done < "$BT_APPLIED_FILE"
+              fi
+
+              : > "$NEW"
+              while IFS= read -r PKG || [ -n "$PKG" ]; do
+                  is_safe_pkg "$PKG" || continue
+                  block_bt "$PKG"
+                  printf '%s\\n' "$PKG" >> "$NEW"
+              done < "$CUR"
+
+              sort -u "$NEW" 2>/dev/null > "$BT_APPLIED_FILE.tmp" || :
+              mv -f "$BT_APPLIED_FILE.tmp" "$BT_APPLIED_FILE" 2>/dev/null
+              chmod 0600 "$BT_APPLIED_FILE" 2>/dev/null
+              chcon u:object_r:system_file:s0 "$BT_APPLIED_FILE" 2>/dev/null
+              rm -f "$CUR" "$NEW"
+          }
+
+          refresh_serial() {
+              [ -s "$SERIAL_FILE" ] && return 0
+              S="$(get_original_serial)" || return 1
+              TMP="$SERIAL_FILE.tmp.$$"
+              printf '%s\\n' "$S" > "$TMP"
+              chmod 0600 "$TMP"
+              mv -f "$TMP" "$SERIAL_FILE"
+              chcon u:object_r:system_file:s0 "$SERIAL_FILE" 2>/dev/null
+          }
+
+          check_once() {
+              refresh_serial
+              ensure_grant
+              CUR_HASH="$(cksum "$CONFIG_FILE" 2>/dev/null | awk '{print $1"_"$2}')"
+              OLD_HASH="$(cat "$LAST_HASH_FILE" 2>/dev/null)"
+              if [ "$CUR_HASH" != "$OLD_HASH" ] || [ "$1" = "force" ]; then
+                  apply_bt_blocks
+                  printf '%s\\n' "$CUR_HASH" > "$LAST_HASH_FILE" 2>/dev/null
+                  PKGS="$(read_target_packages | tr '\\n' ',' | sed 's/,$//')"
+                  [ -z "$PKGS" ] && PKGS="none"
+                  write_status "active" "0" "Offline Active. Targets: $PKGS"
+              fi
+          }
+
+          case "$1" in
+              --once) check_once force; exit 0 ;;
+              --daemon|"")
+                  check_once force
+                  while true; do
+                      sleep 3600
+                      check_once
+                  done ;;
+              *) exit 0 ;;
+          esac
+          '''
+          svc2_content = "\n".join(line[10:] if line.startswith("          ") else line for line in svc2_content.splitlines()) + "\n"
+          pathlib.Path("service_v2.sh").write_text(svc2_content, encoding="utf-8")
+
+          # 4. Update action.sh: inject bundled offline keybox.xml immediately without network wait
+          act_path = pathlib.Path("action.sh")
+          if act_path.exists():
+              act = act_path.read_text(encoding="utf-8")
+              old_dl = re.compile(r"# ---- Download \+ inject keybox \(TrickyStore\) ----.*?# ---- Restart GMS", re.DOTALL)
+              new_dl = '''# ---- Inject keybox offline (TrickyStore) ----
+          p ""
+          p "  [✦] Applying offline keybox..."
+          PASS="❌"
+          if [ -s "$MODDIR/keybox.xml" ]; then
+            [ -s "$KEYBOX" ] && cp -f "$KEYBOX" "$BACKUP" 2>/dev/null
+            cp -f "$MODDIR/keybox.xml" "$KEYBOX" 2>/dev/null
+            chmod 644 "$KEYBOX" 2>/dev/null
+            chcon u:object_r:system_file:s0 "$KEYBOX" 2>/dev/null
+            ok "Bundled offline keybox injected -> $KEYBOX"
+            PASS="✅"
+          elif [ -s "$KEYBOX" ]; then
+            chmod 644 "$KEYBOX" 2>/dev/null
+            chcon u:object_r:system_file:s0 "$KEYBOX" 2>/dev/null
+            ok "Existing local keybox active -> $KEYBOX"
+            PASS="✅"
+          elif [ -s "$BACKUP" ]; then
+            cp -f "$BACKUP" "$KEYBOX" 2>/dev/null
+            chmod 644 "$KEYBOX" 2>/dev/null
+            ok "Restored backup keybox -> $KEYBOX"
+            PASS="✅"
+          fi
+
+          # ---- Restart GMS'''
+              new_dl = "\n".join(line[10:] if line.startswith("          ") else line for line in new_dl.splitlines())
+              act = old_dl.sub(new_dl, act)
+              act_path.write_text(act, encoding="utf-8")
+
+          # 5. Update webroot/index.html: remove Google Fonts online links and enable Inject button by default
+          idx_path = pathlib.Path("webroot/index.html")
+          if idx_path.exists():
+              idx = idx_path.read_text(encoding="utf-8")
+              idx = re.sub(r'<link[^>]*fonts\.googleapis\.com[^>]*>\s*', '', idx)
+              idx = idx.replace('v3.6 · Premium', 'v4.0 · Offline')
+              idx = idx.replace('>v3.6<', '>v4.0<')
+              idx = idx.replace('CHECKING…', 'OFFLINE ACTIVE')
+              idx = idx.replace('<p>ONLINE VERIFIED</p>', '<p>OFFLINE PERMANENT</p>')
+              idx = idx.replace('id="btn-inject" onclick="injectApp()" disabled', 'id="btn-inject" onclick="injectApp()"')
+              idx_path.write_text(idx, encoding="utf-8")
+
+          # 6. Update webroot/scripts.js: disable all license/security blocks and fix newline escaping
+          js_path = pathlib.Path("webroot/scripts.js")
+          if js_path.exists():
+              js = js_path.read_text(encoding="utf-8")
+              js = js.replace("licensed:false, serial:'—'", "licensed:true, serial:'OFFLINE-ACTIVE'")
+              js = js.replace(
+                  "if(!STATE.licensed){\n    addLog('Injection blocked — device not licensed','fail');\n    showTab('license',document.getElementById('tab-license'));\n    return;\n  }",
+                  "STATE.licensed = true;"
+              )
+              js = js.replace(
+                  "if(STATE.licensed){inj.disabled=false;inj.textContent='Inject — Saves Automatically';}\n    else{inj.disabled=true;inj.textContent='Activate license to inject';}",
+                  "inj.disabled=false;inj.textContent='Inject — Saves Automatically';"
+              )
+              js = js.replace(
+                  "if(inj&&!lic){inj.disabled=true;inj.textContent='Activate to inject';}",
+                  "if(inj){inj.disabled=false;inj.textContent='Inject — Saves Automatically';}"
+              )
+              js = js.replace(
+                  'rst+=`settings put secure android_id "${newAid}"; `;',
+                  'rst+=`pm grant ${pkg} android.permission.READ_PHONE_STATE 2>/dev/null; settings put secure android_id "${newAid}"; `;'
+              )
+
+              old_chk = re.compile(r"async function checkLicense\(\)\{.*?return licensed;\n\}", re.DOTALL)
+              new_chk = "\n".join([
+                  "async function checkLicense(){",
+                  "  let serial='OFFLINE-ACTIVE';",
+                  "  try{",
+                  '    const out=await shell(`cat "${SERIAL_PATH}" 2>/dev/null || getprop ro.serialno 2>/dev/null || true`);',
+                  "    if(out&&out.trim()&&out.trim()!=='DEMO_MODE') serial=out.trim().split(/\\r?\\n/)[0];",
+                  "  }catch(e){}",
+                  "  STATE.licensed=true; STATE.serial=serial;",
+                  "  applyLicenseUI(false);",
+                  "  updateExpiry(true);",
+                  "  const inj=document.getElementById('btn-inject');",
+                  "  if(inj){ inj.disabled=false; inj.textContent='Inject — Saves Automatically'; }",
+                  "  return true;",
+                  "}",
+              ])
+              js = old_chk.sub(lambda _: new_chk, js)
+
+              old_act = re.compile(r"async function activateLicense\(\)\{.*?\n\}", re.DOTALL)
+              new_act = "\n".join([
+                  "async function activateLicense(){",
+                  "  const msg=document.getElementById('lic-msg');",
+                  "  if(msg){ msg.textContent='✓ Offline mode active — permanent license enabled'; msg.className='lic-msg ok'; }",
+                  "  await checkLicense();",
+                  "  addLog('Offline mode active','ok');",
+                  "}",
+              ])
+              js = old_act.sub(lambda _: new_act, js)
+              js_path.write_text(js, encoding="utf-8")
+
+          print("All scripts and WebUI security checks disabled for permanent offline operation.")
+          PYEOF
+
+      - name: Disable All Security, Anti-Tamper & License Checks in Zygisk Libraries
+        run: |
+          python3 - << 'PYEOF'
+          import hashlib, pathlib, struct
+
+          # ── 1. Patch zygisk/arm64-v8a.so ──────────────────────────────────────
+          so64_path = pathlib.Path("zygisk/arm64-v8a.so")
+          so64 = bytearray(so64_path.read_bytes())
+
+          MOV_W0_1_RET_A64 = bytes.fromhex("20008052c0035fd6")  # mov w0, #1; ret
+          MOV_X0_0_RET_A64 = bytes.fromhex("000080d2c0035fd6")  # mov x0, #0; ret
+          MOV_X0_XZR_A64   = bytes.fromhex("e0031faa")          # mov x0, xzr
+
+          # In sub_1a6fc (0x1a6fc), jump from 0x1a724 directly to 0x1ab70 so that:
+          #   - [0x3f810] (g_licensed) is set to 1
+          #   - [0x3f958] (g_licexp) is set to 0x7f000000
+          #   - [0x3f7f0..0x3f80c] (8 security token words) are populated
+          #   - w0 = 1 is returned cleanly
+          stub_1a724 = struct.pack(
+              "<IIIII",
+              0xaa1403f5,  # mov x21, x20 (save TPIDR_EL0 for epilogue canary check)
+              0xd2afe013,  # movz x19, #0x7f00, lsl #16 (licexp = 0x7f000000)
+              0xb0000134,  # adrp x20, 0x3f000
+              0x91214694,  # add x20, x20, #0x851 (x20 = 0x3f851)
+              0x1400010f,  # b 0x1ab70
+          )
+          so64[0x1a724:0x1a724 + len(stub_1a724)] = stub_1a724
+
+          # Patch all other security/tamper/manifest/signature functions to return 1 (or 0 for heartbeat)
+          #   - 0x1a5ec: anti-debug /proc/self/maps check
+          #   - 0x1ac04: manifest checksums.sha256 + checksums.sig check
+          #   - 0x1b13c: self-integrity .so SHA256 check
+          #   - 0x1b388: postAppSpecialize license & expiry check
+          #   - 0x1b40c: Ed25519 signature verification
+          #   - 0x1b508: 11-file SHA256 integrity loop
+          for fn_off in (0x1a5ec, 0x1ac04, 0x1b13c, 0x1b388, 0x1b40c, 0x1b508):
+              so64[fn_off:fn_off+8] = MOV_W0_1_RET_A64
+
+          #   - 0x1b08c: .lic_hb heartbeat timestamp reader -> return 0 (no replay block)
+          so64[0x1b08c:0x1b08c+8] = MOV_X0_0_RET_A64
+
+          #   - 0x169ac: skip slow synchronous popen("pm grant ...") inside preAppSpecialize
+          so64[0x169ac:0x169b0] = MOV_X0_XZR_A64
+
+          # Also sync the 11 embedded file SHA256 hashes in .rodata of arm64-v8a.so
+          arm64_hash_offsets = {
+              "module.prop":          0x00c0a9,
+              "system.prop":          0x00bebb,
+              "post-fs-data.sh":      0x009700,
+              "service.sh":           0x00c808,
+              "service_v2.sh":        0x009741,
+              "action.sh":            0x009303,
+              "NOTICE.txt":           0x00bbb7,
+              "common/get_serial.sh": 0x00a35b,
+              "webroot/index.html":   0x00c97f,
+              "webroot/scripts.js":   0x008d52,
+              "webroot/styles.css":   0x00999f,
+          }
+          for rel, off in arm64_hash_offsets.items():
+              p = pathlib.Path(rel)
+              if p.exists():
+                  digest = hashlib.sha256(p.read_bytes()).hexdigest().encode("ascii")
+                  so64[off:off+64] = digest
+
+          so64_path.write_bytes(bytes(so64))
+          print("Patched zygisk/arm64-v8a.so (all security gates disabled & state initialized).")
+
+          # ── 2. Patch zygisk/armeabi-v7a.so ────────────────────────────────────
+          so32_path = pathlib.Path("zygisk/armeabi-v7a.so")
+          so32 = bytearray(so32_path.read_bytes())
+
+          MOVS_R0_1_BX_LR = bytes.fromhex("01207047")  # movs r0, #1; bx lr
+          MOVS_R0_0_BX_LR = bytes.fromhex("00207047")  # movs r0, #0; bx lr
+          MOVS_R0_0_NOP   = bytes.fromhex("002000bf")  # movs r0, #0; nop
+
+          # In sub_dfc4 (0x0dfc4), jump from 0x0dff0 directly to 0x0e2e8 so that:
+          #   - [0x27fac] (g_licensed) is set to 1
+          #   - [0x280f0] (g_licexp) is set to 0x7f000000
+          #   - [0x27f8c..0x27fa8] (8 security token words) are populated
+          #   - r0 = 1 is returned cleanly
+          stub_0dff0 = bytes.fromhex("5d464ff0fe4800f077b9")  # mov r5, r11; mov.w r8, #0x7f000000; b.w 0x0e2e8
+          so32[0x0dff0:0x0dff0 + len(stub_0dff0)] = stub_0dff0
+
+          # Patch all other security/tamper/manifest/signature functions in armeabi-v7a.so:
+          #   - 0x0def0: anti-debug /proc/self/maps check
+          #   - 0x0e3ac: manifest checksums.sha256 + checksums.sig check
+          #   - 0x0e6f8: self-integrity .so SHA256 check
+          #   - 0x0e898: postAppSpecialize license & expiry check
+          #   - 0x0e8fc: Ed25519 signature verification
+          #   - 0x0e9a4: 11-file SHA256 integrity loop
+          for fn_off in (0x0def0, 0x0e3ac, 0x0e6f8, 0x0e898, 0x0e8fc, 0x0e9a4):
+              so32[fn_off:fn_off+4] = MOVS_R0_1_BX_LR
+
+          #   - 0x0e670: .lic_hb heartbeat timestamp reader -> return 0
+          so32[0x0e670:0x0e674] = MOVS_R0_0_BX_LR
+
+          #   - 0x0b1f0: skip slow synchronous popen("pm grant ...") inside preAppSpecialize
+          so32[0x0b1f0:0x0b1f4] = MOVS_R0_0_NOP
+
+          arm32_hash_offsets = {
+              "module.prop":          0x0859f,
+              "system.prop":          0x0838e,
+              "post-fs-data.sh":      0x05f55,
+              "service.sh":           0x08c2a,
+              "service_v2.sh":        0x05f96,
+              "action.sh":            0x05b7c,
+              "NOTICE.txt":           0x0811b,
+              "common/get_serial.sh": 0x06a30,
+              "webroot/index.html":   0x08dae,
+              "webroot/scripts.js":   0x0562c,
+              "webroot/styles.css":   0x06204,
+          }
+          for rel, off in arm32_hash_offsets.items():
+              p = pathlib.Path(rel)
+              if p.exists():
+                  digest = hashlib.sha256(p.read_bytes()).hexdigest().encode("ascii")
+                  so32[off:off+64] = digest
+
+          so32_path.write_bytes(bytes(so32))
+          print("Patched zygisk/armeabi-v7a.so (all security gates disabled & state initialized).")
+
+          # ── 3. Regenerate checksums.sha256 ────────────────────────────────────
+          manifest_files = [
+              "NOTICE.txt",
+              "action.sh",
+              "apply_props.sh",
+              "bin/arm64-v8a/licverify",
+              "bin/armeabi-v7a/licverify",
+              "common/get_serial.sh",
+              "config.json",
+              "customize.sh",
+              "module.prop",
+              "pif.json",
+              "post-fs-data.sh",
+              "service.sh",
+              "service_v2.sh",
+              "system.prop",
+              "webroot/config.json",
+              "webroot/index.html",
+              "webroot/scripts.js",
+              "webroot/styles.css",
+              "zygisk/arm64-v8a.so",
+              "zygisk/armeabi-v7a.so",
+          ]
+          lines = []
+          for rel in manifest_files:
+              p = pathlib.Path(rel)
+              if p.exists():
+                  h = hashlib.sha256(p.read_bytes()).hexdigest()
+                  lines.append(f"{h}  {rel}")
+          pathlib.Path("checksums.sha256").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          print("Updated checksums.sha256 successfully.")
+          PYEOF
+
+      - name: Package Flashable Magisk/KSU/APatch Module ZIP
+        run: |
+          chmod +x *.sh common/*.sh bin/arm64-v8a/licverify bin/armeabi-v7a/licverify 2>/dev/null || true
+          python3 - << 'PYEOF'
+          import os, pathlib, zipfile
+
+          include_items = [
+              "META-INF",
+              "bin",
+              "common",
+              "webroot",
+              "zygisk",
+              "NOTICE.txt",
+              "action.sh",
+              "apply_props.sh",
+              "checksums.sha256",
+              "checksums.sig",
+              "config.json",
+              "customize.sh",
+              "module.prop",
+              "pif.json",
+              "post-fs-data.sh",
+              "service.sh",
+              "service_v2.sh",
+              "system.prop",
+              "keybox.xml",
+          ]
+
+          out_zip = "HMOD-Zero-v4.0-Offline.zip"
+          with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+              for item in include_items:
+                  path = pathlib.Path(item)
+                  if not path.exists():
+                      continue
+                  if path.is_file():
+                      zf.write(path, path.as_posix())
+                  else:
+                      for f in sorted(path.rglob("*")):
+                          if f.is_file():
+                              zf.write(f, f.as_posix())
+          print(f"Packaged {out_zip} ({os.path.getsize(out_zip)} bytes)")
+          PYEOF
+
+      - name: Upload Flashable Module Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HMOD-Zero-v4.0-Offline
+          path: HMOD-Zero-v4.0-Offline.zip
+          if-no-files-found: error
